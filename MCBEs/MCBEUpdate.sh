@@ -9,8 +9,9 @@ VERSION_FILE="/var/lib/minecraft-monitor/current_version.txt"
 # 1. 最新バージョンの確認 (マイクラ公式サイトのヘッダー情報などをスクレイピング)
 # ※ここでは例として、itzgイメージの最新タグが変わったかをチェックする仮定のロジック
 # 実際には `curl` でMojangのページからバージョン文字列をgrepしてくるのが一般的
-LATEST_VERSION=$(curl -s -I https://www.minecraft.net/en-us/download/server/bedrock | grep -i "bedrock-server-" | head -n 1)
-
+# HTMLをダウンロードして、zipファイルのリンクを探し、そこからバージョン番号っぽい部分を抽出
+# (User-Agentを偽装しないと弾かれることがあるので -A を追加)
+LATEST_VERSION=$(curl -s -A "Mozilla/5.0" https://www.minecraft.net/en-us/download/server/bedrock | grep -o 'https://minecraft.azureedge.net/bin-linux/bedrock-server-[0-9.]*\.zip' | head -n 1)
 # 初回起動時などのファイル作成
 if [ ! -f "$VERSION_FILE" ]; then
     echo "$LATEST_VERSION" > "$VERSION_FILE"

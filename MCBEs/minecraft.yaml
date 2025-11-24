@@ -34,6 +34,7 @@ spec:
       containers:
         - name: minecraft
           image: itzg/minecraft-bedrock-server:latest
+	  imagePullPolicy: Always
           tty: true
           stdin: true
           resources:
