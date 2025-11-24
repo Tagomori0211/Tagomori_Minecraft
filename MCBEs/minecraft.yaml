@@ -30,7 +30,6 @@ spec:
       labels:
         app: minecraft-bedrock
     spec:
-      hostNetwork: true # ポート30000問題回避のため貫通モード推奨！
       containers:
         - name: minecraft
           image: itzg/minecraft-bedrock-server:latest
