@@ -8,7 +8,7 @@ metadata:
   namespace: default
 data:
   # 環境に合わせてここだけ変えればOK！
-  TARGET_IP: "192.168.0.10"        # VM1 (DevOps) のIP
+  TARGET_IP: "192.168.0.21"        # VM1 (DevOps) のIP
   TARGET_USER: "tagomori"          # SSHユーザー
   TARGET_DIR: "/minecraft_backups" #転送先ディレクトリ
 
