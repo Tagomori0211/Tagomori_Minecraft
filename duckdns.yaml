@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: duckdns
+  namespace: default
+  labels:
+    app: duckdns
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: duckdns
+  template:
+    metadata:
+      labels:
+        app: duckdns
+    spec:
+      containers:
+        - name: duckdns
+          image: lscr.io/linuxserver/duckdns:latest
+          # リソース制限 (非常に軽量なので最小限に)
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "10m"
+            limits:
+              memory: "64Mi"
+              cpu: "50m"
+          env:
+            - name: TZ
+              value: "Asia/Tokyo"
+            
+            # 【重要】ポートフォリオ用のサブドメイン設定
+            - name: SUBDOMAINS
+              value: "tagomori-monitor" 
+              # -> tagomori-monitor.duckdns.org になります
+            
+            # TokenはSecretから安全に注入！
+            - name: TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: duckdns-secret
+                  key: token
