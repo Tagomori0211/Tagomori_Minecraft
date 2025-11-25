@@ -117,7 +117,7 @@ Name: Shinari (Tagomori0211)
 Location: Kitakyushu, Fukuoka, Japan (Kokura)  
 Role: Aspiring Infrastructure / DevOps Engineer  
 Mission:  
-「北九州のモノづくり精神を、デジタルの力で加速させる」  
+
 物理ハードウェア（自作サーバー、10Gネットワーク）の構築経験と、モダンなクラウドネイティブ技術（K8s, IaC）を融合させ、現場で本当に使えるDX基盤の構築を目指しています。  
 Contact:  
 GitHub Profile | LinkedIn  
