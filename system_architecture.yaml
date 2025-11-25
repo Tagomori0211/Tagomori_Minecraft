@@ -1,51 +1,79 @@
 system_name: Minecraft_Bedrock_Resource_Dashboard
+version: 2.0.0
 goal: >
-  Learn SQL, Docker, CI/CD, Python Flask, Nginx, and JavaScript
-  by visualizing Minecraft BE server resource status.
+  Demonstrate "Hybrid On-Premise IaC" skills by visualizing Minecraft BE server resources.
+  Targeting Digital Transformation (DX) in the manufacturing industry with a focus on self-hosted infrastructure.
+
+technical_stack:
+  iac_pipeline: "T > A > K (Terraform > Ansible > Kubernetes)"
+  ci_cd: GitHub Actions (Self-hosted Runner)
+  containerization: Docker (Compose) & Kubernetes (K3s)
 
 infrastructure:
-  virtual_machines:
-    - name: dev_ops_vm
-      role: Main operational VM (CI/CD, Docker Host, Web Server, DB Server)
-      os: Linux (e.g., Ubuntu Server)
-      description: >
-        Hosts all Docker containers (parser, DB, API, Nginx) and runs CI/CD pipelines.
-        Also acts as the SCP server to receive Minecraft backups.
-    - name: mcbe_server_vm
-      role: Minecraft Bedrock Edition Server
-      os: Linux (e.g., Ubuntu Server)
-      description: >
-        Runs the Minecraft BE server. Creates periodic world backups and transfers them
-        via SCP to the dev_ops_vm.
+  development_environment:
+    - name: google_cloud_workstations
+      platform: Google Cloud Platform (GCP)
+      role: >
+        Secure Cloud Development Environment.
+        Acts as the control plane for IaC (Terraform, Ansible) execution and code development.
+        Connects to on-premise infrastructure via VPN/Tailscale (future scope) or public endpoints.
+
+  on_premise_servers:
+    - name: dev_ops_vm (VM1)
+      ip: 192.168.0.21 (Static)
+      os: Ubuntu Server
+      role: >
+        Dashboard Host & CI/CD Runner.
+        Runs Docker Compose (Parser, DB, API, Nginx).
+        Acts as the "Receiver" for Minecraft backup data via SCP.
+        Hosts GitHub Actions Self-hosted Runner.
+
+    - name: mcbe_server_vm (VM2)
+      ip: 192.168.0.20 (Static)
+      os: Ubuntu Server
+      role: >
+        Game Server Host.
+        Runs K3s (Kubernetes) Single Node Cluster.
+        Hosts Minecraft BE Pod and management CronJobs.
+        Acts as the "Sender" of backup data.
 
 ci_cd_workflow:
-  trigger:
-    - code_commit: Push to Git repository (for application code updates)
-    - scp_reception: New Minecraft backup file received on dev_ops_vm (for data ingestion)
-  pipeline_steps:
-    - build_docker_images: For parser, app, nginx containers.
-    - run_unit_tests: For Python application.
-    - run_integration_tests: (Optional) Test API against a temporary DB.
-    - push_to_registry: Docker images to Container Registry.
-    - deploy_containers: Update/restart containers on dev_ops_vm using Docker Compose.
-    - trigger_data_ingestion: Execute python-parser container to process new backup.
+  development_flow:
+    - step: Code changes in Google Cloud Workstations.
+    - step: Push to GitHub repository.
+    - step: GitHub Actions triggers Self-hosted Runner on dev_ops_vm.
+  
+  deployment_flow:
+    - target: dev_ops_vm (Dashboard)
+      method: Docker Compose (via GitHub Actions)
+      trigger: Push to main branch.
+    - target: mcbe_server_vm (Minecraft)
+      method: Manual kubectl apply (from Workstations) or GitOps (future).
+      note: "Manifests are managed in the /MCBEs directory."
+
+  operational_automation:
+    - task: Daily Backup & Transfer
+      executor: K8s CronJob on mcbe_server_vm
+      action: Compresses /data, SCPs to dev_ops_vm:/minecraft_backups.
+    - task: Auto Update Check
+      executor: K8s CronJob on mcbe_server_vm
+      action: Checks version, notifies via RCON, performs rollout restart.
+    - task: Data Ingestion
+      executor: GitHub Actions (Repository Dispatch) or Directory Watcher
+      action: Triggers python-parser container when new backup arrives.
 
 data_flow:
-  - from: mcbe_server_vm (backup)
-    to: dev_ops_vm (via SCP)
-    trigger: SCP reception
-  - from: dev_ops_vm (python-parser container)
-    to: dev_ops_vm (db-postgres container)
-    trigger: Data ingestion pipeline
-  - from: dev_ops_vm (web-nginx container)
-    to: User Browser
-    data_type: Static assets (HTML, CSS, JS)
-  - from: User Browser
-    to: dev_ops_vm (web-nginx -> app-gunicorn containers)
-    data_type: API requests (JSON)
-  - from: dev_ops_vm (app-gunicorn container)
-    to: dev_ops_vm (db-postgres container)
-    data_type: DB queries
-  - from: dev_ops_vm (app-gunicorn container)
-    to: User Browser
-    data_type: API responses (JSON)
+  - source: mcbe_server_vm (K8s Pod volume)
+    destination: dev_ops_vm (Host directory)
+    method: SCP (via CronJob)
+    data: World data snapshot (.tar.gz)
+  
+  - source: dev_ops_vm (Host directory)
+    destination: postgres_db (Container)
+    method: Python Parser (ETL Process)
+    data: Parsed item/chest data
+
+  - source: User Browser
+    destination: Nginx -> Flask API
+    method: HTTPS (DuckDNS domain)
+    data: Dashboard visualization request
