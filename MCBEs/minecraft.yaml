@@ -27,9 +27,8 @@ spec:
   ports:
     - name: bedrock-udp
       protocol: UDP
-      # [IMPORTANT_DEV] 既存サーバー(19132)との衝突回避のため、開発中は19133にズラす
-      port: 19134
-      targetPort: 19134  # コンテナ側の 19133 に転送！
+      port: 19134        # サービス側の受付ポート
+      targetPort: 19134  # コンテナへの転送先
       nodePort: 30000    # 外部公開ポート (ルーター設定用)
 
 ---
@@ -52,9 +51,6 @@ spec:
       labels:
         app: minecraft-bedrock
     spec:
-      # 【修正】hostNetwork: true は削除しました！
-      # これにより、純粋なk8sネットワーク内で動作し、NodePortが有効になります。
-
       containers:
         - name: minecraft
           image: itzg/minecraft-bedrock-server:latest
@@ -62,17 +58,17 @@ spec:
           tty: true
           stdin: true
 
-          # 【重要】コンテナ側のポート設定
+          # ==========================================
+          # 【修正1】 ポート設定 (穴を開ける設定)
+          # ==========================================
           ports:
-            - # IPv4用ポート (メイン)
-            - name: SERVER_PORT
-              value: "19134"
+            # メインのゲームポート (IPv4)
+            - containerPort: 19134
+              protocol: UDP
+              name: bedrock-udp
             
-            # IPv6用ポート (衝突しないようにズラす！)
-            - name: SERVER_PORT_V6
-              value: "19135"  # <--- ここを修正！
-              
-            - containerPort: 4711  # RCON用
+            # RCON用ポート
+            - containerPort: 4711
               protocol: TCP
               name: rcon-tcp
 
@@ -82,15 +78,22 @@ spec:
             limits:
               memory: "4Gi"
           
+          # ==========================================
+          # 【修正2】 環境変数 (ソフトへの設定値)
+          # ==========================================
           env:
             - name: EULA
               value: "TRUE"
             
-            # 【重要】マイクラ本体に「19133で起動せよ」と命令
+            # IPv4ポート設定 (19133から変更)
             - name: SERVER_PORT
               value: "19134"
 
-            # RCON設定 (自動アプデスクリプト用)
+            # IPv6ポート設定 (IPv4との衝突回避用)
+            - name: SERVER_PORT_V6
+              value: "19135"
+
+            # RCON設定
             - name: ENABLE_RCON
               value: "true"
             - name: RCON_PASSWORD
