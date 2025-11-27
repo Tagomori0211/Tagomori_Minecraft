@@ -10,11 +10,11 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 10Gi # 余裕を持って10GB
+      storage: 10Gi
 
 ---
 # ---------------------------------------------------------
-# 2. Service (外部への公開設定)
+# 2. Service (外部 & 内部への公開設定)
 # ---------------------------------------------------------
 apiVersion: v1
 kind: Service
@@ -25,11 +25,21 @@ spec:
   selector:
     app: minecraft-bedrock
   ports:
+    # --- ゲーム用ポート (UDP) ---
     - name: bedrock-udp
       protocol: UDP
-      port: 19134        # サービス側の受付ポート
-      targetPort: 19134  # コンテナへの転送先
-      nodePort: 30000    # 外部公開ポート (ルーター設定用)
+      port: 19134
+      targetPort: 19134
+      nodePort: 30000
+
+    # --- 【追加】監視用ポート (TCP) ---
+    # Prometheusがここを叩いてデータを取っていきます
+    - name: metrics
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
+      nodePort: 30001
+
 
 ---
 # ---------------------------------------------------------
@@ -52,22 +62,19 @@ spec:
         app: minecraft-bedrock
     spec:
       containers:
+        # ==========================================
+        # Main Container: Minecraft Server
+        # ==========================================
         - name: minecraft
           image: itzg/minecraft-bedrock-server:latest
           imagePullPolicy: Always
           tty: true
           stdin: true
 
-          # ==========================================
-          # 【修正1】 ポート設定 (穴を開ける設定)
-          # ==========================================
           ports:
-            # メインのゲームポート (IPv4)
             - containerPort: 19134
               protocol: UDP
               name: bedrock-udp
-            
-            # RCON用ポート
             - containerPort: 4711
               protocol: TCP
               name: rcon-tcp
@@ -78,33 +85,47 @@ spec:
             limits:
               memory: "4Gi"
           
-          # ==========================================
-          # 【修正2】 環境変数 (ソフトへの設定値)
-          # ==========================================
           env:
             - name: EULA
               value: "TRUE"
-            
-            # IPv4ポート設定 (19133から変更)
             - name: SERVER_PORT
-              value: "19134"
-
-            # IPv6ポート設定 (IPv4との衝突回避用)
+              value: "19134"     # IPv4
             - name: SERVER_PORT_V6
-              value: "19135"
-
-            # RCON設定
+              value: "19135"     # IPv6 (衝突回避)
             - name: ENABLE_RCON
               value: "true"
             - name: RCON_PASSWORD
               value: "minecraft"
 
-          # データマウント設定
           volumeMounts:
             - name: data-volume
               mountPath: /data
+
+        # ==========================================
+        # Sidecar Container: MC Monitor (Exporter)
+        # ==========================================
+        - name: exporter
+          image: itzg/mc-monitor:latest
+          imagePullPolicy: Always
+          
+          # 【修正決定版】
+          # 1. command は削除 (Entrypoint /mc-monitor を活かす)
+          # 2. args でサブコマンドと引数を渡す
+          # 3. フラグは -interval を使用
+          args: 
+            - "export-for-prometheus"
+            - "-bedrock-servers"
+            - "127.0.0.1:19134"
+           
+
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+              name: metrics
+          env:
+            - name: DEBUG
+              value: "true"
       
-      # ボリュームの定義 (HostPathでオンプレミスのデータを直接参照)
       volumes:
         - name: data-volume
           hostPath:
