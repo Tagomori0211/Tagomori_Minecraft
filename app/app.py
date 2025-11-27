@@ -4,23 +4,21 @@ import os
 
 app = Flask(__name__)
 
-# PrometheusのURL (Docker Compose内でのサービス名でアクセス)
-# ポートは9090番が標準
+# PrometheusのURL
+# Docker Compose内のサービス名でアクセス
 PROMETHEUS_URL = "http://prometheus:9090"
 
 def query_prometheus(query):
     """
-    PrometheusにPromQLクエリを投げて結果を返す関数
+    Prometheusからデータを取得し、生データ(result[0])を返す
     """
     try:
-        # PrometheusのAPIエンドポイント /api/v1/query にGETリクエストを送る
         response = requests.get(f"{PROMETHEUS_URL}/api/v1/query", params={'query': query})
         data = response.json()
         
-        # データが正常に返ってきているか確認
+        # データが正常、かつ結果が空でない場合
         if data["status"] == "success" and len(data["data"]["result"]) > 0:
-            # 最新の値を返す (valueは [timestamp, "値"] の形式なので2番目を取得)
-            return data["data"]["result"][0]["value"][1]
+            return data["data"]["result"][0]
         return None
     except Exception as e:
         print(f"Error querying Prometheus: {e}")
@@ -28,54 +26,86 @@ def query_prometheus(query):
 
 @app.route('/')
 def hello():
-    # ヘルスチェック用 (Nginxがここを見て生存確認したりする)
-    return jsonify({
-        "message": "Minecraft Monitor API is Running!",
-        "status": "OK"
-    })
+    # ヘルスチェック用
+    return jsonify({"message": "Minecraft Monitor API OK", "status": "Running"})
 
 @app.route('/api/status')
 def get_status():
-    """
-    フロントエンドが叩くAPI。
-    Prometheusから各メトリクスを集めてJSONで返す。
-    """
-    
-    # 1. オンライン人数 (mc-monitorのメトリクス)
-    players_online = query_prometheus('mc_bedrock_players_online')
-    
-    # 2. 最大接続人数
-    players_max = query_prometheus('mc_bedrock_players_max')
-    
-    # 3. バージョン情報 
-    # (mc_bedrock_version というメトリクスのラベルに含まれることが多い。
-    #  数値ではない情報を取るのは少し工夫がいるけど、まずは簡易的に取得)
-    # ※もし取得できなければ "Unknown" にする
-    version_data = "Unknown" 
-    # TODO: バージョン取得ロジックはExporterの仕様に合わせて後で調整が必要かも
+    # -------------------------------------------------
+    # 1. ゲーム内情報の取得 (Exporter)
+    # -------------------------------------------------
+    # オンライン人数
+    online_res = query_prometheus('minecraft_status_players_online_count')
+    # 最大人数
+    max_res = query_prometheus('minecraft_status_players_max_count')
+    # サーバー健全性 (ここにバージョン情報が含まれる)
+    healthy_res = query_prometheus('minecraft_status_healthy')
 
-    # 4. CPU/メモリ使用率
-    # K3s環境なので、Podごとのリソースは cAdvisor (kubelet) 経由で取れるはず。
-    # ここでは仮のクエリを入れるけど、Prometheusの設定によっては取れない場合がある。
-    # その場合は "N/A" を返すようにするね。
-    cpu_usage = query_prometheus('sum(rate(container_cpu_usage_seconds_total{image!="", container="minecraft"}[1m])) * 100')
-    mem_usage = query_prometheus('sum(container_memory_working_set_bytes{image!="", container="minecraft"}) / 1024 / 1024') # MB換算
+    # -------------------------------------------------
+    # 2. システム負荷情報の取得 (cAdvisor)
+    # -------------------------------------------------
+    # CPU使用率 (%)
+    # cAdvisorはK8sの長いコンテナ名(k8s_minecraft_...)で認識するため、
+    # 正規表現(name=~".*minecraft.*")で「名前にminecraftを含むコンテナ」を抽出する
+    cpu_query = 'sum(rate(container_cpu_usage_seconds_total{name=~".*minecraft.*"}[1m])) * 100'
+    cpu_res = query_prometheus(cpu_query)
 
-    # データの整形
-    status_data = {
-        "status": "Online" if players_online is not None else "Offline",
+    # メモリ使用量 (Bytes)
+    # cacheを含まない working_set_bytes を使用するのが一般的
+    mem_query = 'sum(container_memory_working_set_bytes{name=~".*minecraft.*"})'
+    mem_res = query_prometheus(mem_query)
+
+    # -------------------------------------------------
+    # 3. データの整形
+    # -------------------------------------------------
+    # デフォルト値
+    players_online = 0
+    players_max = 0
+    version = "Unknown"
+    status = "Offline"
+    cpu_usage = "N/A"
+    mem_usage = "N/A"
+
+    # ステータス判定 (人数が取れていればOnlineとみなす)
+    if online_res:
+        status = "Online"
+        players_online = int(online_res['value'][1])
+    
+    if max_res:
+        players_max = int(max_res['value'][1])
+
+    # バージョン情報の抽出 (ラベル: server_version)
+    if healthy_res and 'metric' in healthy_res:
+        version = healthy_res['metric'].get('server_version', 'Unknown')
+
+    # CPU使用率の整形
+    if cpu_res:
+        val = float(cpu_res['value'][1])
+        # 小数点1桁まで
+        cpu_usage = f"{val:.1f}%"
+    
+    # メモリ使用量の整形 (Bytes -> MB)
+    if mem_res:
+        val = float(mem_res['value'][1])
+        # 1MB = 1024 * 1024 bytes
+        mb_val = val / 1048576
+        mem_usage = f"{mb_val:.0f} MB"
+
+    # -------------------------------------------------
+    # 4. レスポンス (JSON)
+    # -------------------------------------------------
+    return jsonify({
+        "status": status,
         "players": {
-            "online": int(players_online) if players_online else 0,
-            "max": int(players_max) if players_max else 0
+            "online": players_online,
+            "max": players_max
         },
         "server": {
-            "version": version_data,
-            "cpu_usage": f"{float(cpu_usage):.1f}%" if cpu_usage else "N/A",
-            "memory_usage": f"{float(mem_usage):.0f} MB" if mem_usage else "N/A"
+            "version": version,
+            "cpu_usage": cpu_usage,
+            "memory_usage": mem_usage
         }
-    }
-
-    return jsonify(status_data)
+    })
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

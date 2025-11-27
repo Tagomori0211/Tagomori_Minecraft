@@ -2,7 +2,16 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  - job_name: 'minecraft-on-k3s'
+# 1. ゲーム内情報 (Existing)
+  - job_name: 'minecraft-bedrock'
     static_configs:
-      # K3sのNodePortを見に行く設定 (MCBE機のIP:公開したポート)
       - targets: ['192.168.0.20:30001']
+        labels:
+          group: 'game-stats'
+
+  # 2. 【追加】システム負荷情報 (cAdvisor)
+  - job_name: 'k3s-cadvisor'
+    static_configs:
+      - targets: ['192.168.0.20:30002']
+        labels:
+          group: 'system-stats'
