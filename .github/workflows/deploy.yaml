@@ -10,8 +10,7 @@ on:
 jobs:
   deploy_on_premise:
     # ここで自宅サーバーのランナーを指定！
-    runs_on: [self-hosted, Linux] 
-
+    runs-on: [self-hosted, Linux] 
     steps:
     # 1. 自宅サーバー内にコードを持​​ってくる
     - name: Checkout code
