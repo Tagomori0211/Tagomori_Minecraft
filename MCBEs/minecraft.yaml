@@ -1,133 +1,77 @@
-# ---------------------------------------------------------
-# 1. PersistentVolumeClaim (データの保存場所)
-# ---------------------------------------------------------
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: mc-bedrock-data
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 10Gi
-
----
-# ---------------------------------------------------------
-# 2. Service (外部 & 内部への公開設定)
-# ---------------------------------------------------------
-apiVersion: v1
-kind: Service
-metadata:
-  name: mc-bedrock-svc
-spec:
-  type: NodePort
-  selector:
-    app: minecraft-bedrock
-  ports:
-    # --- ゲーム用ポート (UDP) ---
-    - name: bedrock-udp
-      protocol: UDP
-      port: 19134
-      targetPort: 19134
-      nodePort: 30000
-
-    # --- 【追加】監視用ポート (TCP) ---
-    # Prometheusがここを叩いてデータを取っていきます
-    - name: metrics
-      protocol: TCP
-      port: 8080
-      targetPort: 8080
-      nodePort: 30001
-
-
----
-# ---------------------------------------------------------
-# 3. Deployment (サーバー本体の設定)
-# ---------------------------------------------------------
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
-  name: mc-bedrock
+  name: cadvisor
+  namespace: default
 spec:
-  replicas: 1
-  strategy:
-    type: Recreate
   selector:
     matchLabels:
-      app: minecraft-bedrock
+      app: cadvisor
   template:
     metadata:
       labels:
-        app: minecraft-bedrock
+        app: cadvisor
     spec:
       containers:
-        # ==========================================
-        # Main Container: Minecraft Server
-        # ==========================================
-        - name: minecraft
-          image: itzg/minecraft-bedrock-server:latest
-          imagePullPolicy: Always
-          tty: true
-          stdin: true
-
-          ports:
-            - containerPort: 19134
-              protocol: UDP
-              name: bedrock-udp
-            - containerPort: 4711
-              protocol: TCP
-              name: rcon-tcp
-
-          resources:
-            requests:
-              memory: "1Gi"
-            limits:
-              memory: "4Gi"
-          
-          env:
-            - name: EULA
-              value: "TRUE"
-            - name: SERVER_PORT
-              value: "19134"     # IPv4
-            - name: SERVER_PORT_V6
-              value: "19135"     # IPv6 (衝突回避)
-            - name: ENABLE_RCON
-              value: "true"
-            - name: RCON_PASSWORD
-              value: "minecraft"
-
-          volumeMounts:
-            - name: data-volume
-              mountPath: /data
-
-        # ==========================================
-        # Sidecar Container: MC Monitor (Exporter)
-        # ==========================================
-        - name: exporter
-          image: itzg/mc-monitor:latest
-          imagePullPolicy: Always
-          
-          # 【修正決定版】
-          # 1. command は削除 (Entrypoint /mc-monitor を活かす)
-          # 2. args でサブコマンドと引数を渡す
-          # 3. フラグは -interval を使用
-          args: 
-            - "export-for-prometheus"
-            - "-bedrock-servers"
-            - "127.0.0.1:19134"
-           
-
-          ports:
-            - containerPort: 8080
-              protocol: TCP
-              name: metrics
-          env:
-            - name: DEBUG
-              value: "true"
-      
+      - name: cadvisor
+        image: gcr.io/cadvisor/cadvisor:v0.47.2
+        ports:
+        - containerPort: 8080
+          name: http
+        args:
+          - -housekeeping_interval=10s
+          # 【重要】K3sのcontainerdソケットを指定
+          - -containerd=/run/k3s/containerd/containerd.sock
+          - -docker_only=false
+        volumeMounts:
+        - name: rootfs
+          mountPath: /rootfs
+          readOnly: true
+        - name: var-run
+          mountPath: /var/run
+          readOnly: true
+        - name: sys
+          mountPath: /sys
+          readOnly: true
+        # 【重要】ソケットがあるディレクトリをマウント
+        - name: k3s-containerd
+          mountPath: /run/k3s/containerd
+          readOnly: true
+        - name: disk
+          mountPath: /dev/disk
+          readOnly: true
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
       volumes:
-        - name: data-volume
-          hostPath:
-            path: /data/minecraft
-            type: Directory
+      - name: rootfs
+        hostPath:
+          path: /
+      - name: var-run
+        hostPath:
+          path: /var/run
+      - name: sys
+        hostPath:
+          path: /sys
+      # 【重要】ホスト側のパス
+      - name: k3s-containerd
+        hostPath:
+          path: /run/k3s/containerd
+      - name: disk
+        hostPath:
+          path: /dev/disk
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cadvisor-svc
+  namespace: default
+spec:
+  selector:
+    app: cadvisor
+  type: NodePort
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+      nodePort: 30002

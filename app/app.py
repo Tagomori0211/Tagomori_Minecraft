@@ -45,14 +45,11 @@ def get_status():
     # -------------------------------------------------
     # 2. システム負荷情報の取得 (cAdvisor)
     # -------------------------------------------------
-    # CPU使用率 (%)
-    # cAdvisorはK8sの長いコンテナ名(k8s_minecraft_...)で認識するため、
-    # 正規表現(name=~".*minecraft.*")で「名前にminecraftを含むコンテナ」を抽出する
+    # CPU使用率 (%)  labelを name -> container に変更
     cpu_query = 'sum(rate(container_cpu_usage_seconds_total{container=~".*minecraft.*"}[1m])) * 100'
     cpu_res = query_prometheus(cpu_query)
 
-    # メモリ使用量 (Bytes)
-    # cacheを含まない working_set_bytes を使用するのが一般的
+    # メモリ使用量 (Bytes) labelを name -> container に変更
     mem_query = 'sum(container_memory_working_set_bytes{container=~".*minecraft.*"})'
     mem_res = query_prometheus(mem_query)
 
