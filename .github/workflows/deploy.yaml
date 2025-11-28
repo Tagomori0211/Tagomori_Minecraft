@@ -21,6 +21,7 @@ jobs:
         echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
         echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" >> .env
         echo "FLASK_APP_SECRET_KEY=${{ secrets.FLASK_APP_SECRET_KEY }}" >> .env
+        echo "DUCKDNS_TOKEN=${{ secrets.DUCKDNS_TOKEN }}" >> .env
 
     - name: Build and Deploy Dashboard (Docker)
       run: |

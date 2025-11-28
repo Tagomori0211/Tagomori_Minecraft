@@ -90,6 +90,19 @@ services:
       - prometheus
     restart: unless-stopped
 
+  
+  duckdns:
+    image: lscr.io/linuxserver/duckdns:latest
+    container_name: duckdns
+    environment:
+      - PUID=1000 # ユーザーID (適宜調整、なくても動くことが多い)
+      - PGID=1000
+      - TZ=Asia/Tokyo
+      - SUBDOMAINS=tagomori-monitor # ここにサブドメイン名！
+      - TOKEN=${DUCKDNS_TOKEN}      # .envから読み込み
+      - LOG_FILE=false
+    restart: unless-stopped
+
 volumes:
   postgres_data: # Define named volume for PostgreSQL data persistence
   prometheus_data:
