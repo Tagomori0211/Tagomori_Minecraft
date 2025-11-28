@@ -66,15 +66,15 @@ data:
     fi
 
     # RCONでユーザーに通知 (いきなり落ちたら困るからね！)
-    echo "📢 Sending notification via RCON..."
-    kubectl exec $POD_NAME -c $CONTAINER -- rcon-cli say "§e[System] §bDaily Maintenance starting in 60 seconds."
-    kubectl exec $POD_NAME -c $CONTAINER -- rcon-cli say "§e[System] §fServer will restart to check for updates."
+   echo "📢 Sending daily restart notification..."
+    # 【修正】 rcon-cli ➡️ /usr/local/bin/rcon-cli に変更 (2箇所)
+    kubectl exec $POD_NAME -c $CONTAINER -- /usr/local/bin/rcon-cli say "§e[System] §bDaily Maintenance starting in 60 seconds."
+    kubectl exec $POD_NAME -c $CONTAINER -- /usr/local/bin/rcon-cli say "§e[System] §fServer will restart to check for updates."
     
-    # 60秒待つ
     sleep 60
     
-    kubectl exec $POD_NAME -c $CONTAINER -- rcon-cli say "§e[System] §cRebooting now..."
-    
+    # 【修正】 ここも変更
+    kubectl exec $POD_NAME -c $CONTAINER -- /usr/local/bin/rcon-cli say "§e[System] §cRebooting now..."
     # Rollout Restart
     # これを実行すると、新しいPodが作られ、その起動時にitzgイメージが
     # 自動的に最新バージョンをチェック＆ダウンロードしてくれる！
