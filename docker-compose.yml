@@ -1,4 +1,3 @@
-# docker-compose.yml (This file is an example of Infrastructure as Code)
 version: '3.8'
 
 services:
@@ -12,69 +11,57 @@ services:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
     volumes:
-      - postgres_data:/var/lib/postgresql/data # Persistent data storage
-    # ports: # Not exposed to host by default, only internal Docker network
-    #   - "5432:5432" 
+      - postgres_data:/var/lib/postgresql/data
 
-  # Python Data Parser & Ingestion Service (Runs on-demand)
+  # Python Parser
   parser:
     container_name: python-parser
     build:
-      context: ./parser # Path to parser's Dockerfile
+      context: ./parser
       dockerfile: Dockerfile_parser
     environment:
       DATABASE_URL: postgresql://user:password@db:5432/minecraft_resources
-      FLASK_ENV: development # Example for Flask env
+      FLASK_ENV: development
     volumes:
-      - ./minecraft_backups:/app/minecraft_backups # Mount host backup directory
+      - ./minecraft_backups:/app/minecraft_backups
     depends_on:
       - db
-    # command: python parse_and_ingest.py # This is usually run via CI/CD or cron, not as a constantly running service
 
-  # Flask API Service (Behind Nginx)
+  # Flask API Service
   app:
     container_name: app-gunicorn
     build:
-      context: ./app # Path to Flask app's Dockerfile
+      context: ./app
       dockerfile: Dockerfile_app
     restart: unless-stopped
-    command: gunicorn --config gunicorn_config.py app:app # Entrypoint for Gunicorn
+    command: gunicorn --config gunicorn_config.py app:app
     environment:
       DATABASE_URL: postgresql://user:password@db:5432/minecraft_resources
-      FLASK_APP_SECRET_KEY: your_secret_key_here
+      # GitHub Secretsから注入される環境変数を読み込む
+      FLASK_APP_SECRET_KEY: ${FLASK_APP_SECRET_KEY} 
     depends_on:
       - db
 
-  # Nginx Reverse Proxy & Static File Server
+  # Nginx Reverse Proxy
   nginx:
     container_name: web-nginx
     build:
-      context: ./nginx # Path to Nginx Dockerfile (incl. Nginx config & frontend static files)
+      context: ./nginx
       dockerfile: Dockerfile_nginx
     restart: unless-stopped
     ports:
-      - "80:80" # Expose web server to host's port 80
-      - "443:443" # For HTTPS (requires SSL setup)
+      - "80:80"   # HTTP
+      - "443:443" # HTTPS
     volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d # Mount Nginx configuration
-      - ./nginx/frontend:/var/www/html # Mount static frontend files
-      # ↓↓↓ 【追加】証明書と認証用ファイルを共有 ↓↓↓
-      - ./certbot/conf:/etc/letsencrypt
-      - ./certbot/www:/var/www/certbot
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/frontend:/var/www/html
+      # 【重要修正】証明書を絶対パスでマウント (デプロイ時の削除回避)
+      - /home/tagomori/server_data/certbot/conf:/etc/letsencrypt
+      - /home/tagomori/server_data/certbot/www:/var/www/certbot
     depends_on:
-      - app # Ensure Flask app is running before Nginx starts proxying
-  
-  # Certbot (証明書発行ロボット)
-  certbot:
-    image: certbot/certbot
-    container_name: certbot
-    volumes:
-      - ./certbot/conf:/etc/letsencrypt
-      - ./certbot/www:/var/www/certbot
-    # 証明書更新をチェックするコマンド (12時間ごとにチェック)
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+      - app
 
-
+  # Prometheus
   prometheus:
     image: prom/prometheus:latest
     container_name: monitoring-prometheus
@@ -85,43 +72,53 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
     restart: unless-stopped
 
-  
+  # Grafana
   grafana:
     image: grafana/grafana:latest
     container_name: monitoring-grafana
-    ports:
-      - "3000:3000" # DevOps機の3000番で公開
+    # ports:  <-- Nginx経由にするためポート公開は削除
+    #   - "3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=password123
-      # 1. サイトへの埋め込みを許可
+      # 埋め込み許可 & 匿名アクセス設定
       - GF_SECURITY_ALLOW_EMBEDDING=true
-      # 2. 匿名アクセスを許可 (ログイン画面を出さないため)
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
-      # ↓↓↓ 【追加】サブパス設定 ↓↓↓
+      # サブパス設定 (Reverse Proxy用)
       - GF_SERVER_DOMAIN=tagomori-monitor.duckdns.org
-      - GF_SERVER_ROOT_URL=http://tagomori-monitor.duckdns.org/grafana/
+      - GF_SERVER_ROOT_URL=https://tagomori-monitor.duckdns.org/grafana/
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
     depends_on:
       - prometheus
     restart: unless-stopped
 
-  
+  # DuckDNS Updater
   duckdns:
     image: lscr.io/linuxserver/duckdns:latest
     container_name: duckdns
     environment:
-      - PUID=1000 # ユーザーID (適宜調整、なくても動くことが多い)
+      - PUID=1000
       - PGID=1000
       - TZ=Asia/Tokyo
-      - SUBDOMAINS=tagomori-monitor # ここにサブドメイン名！
-      - TOKEN=${DUCKDNS_TOKEN}      # .envから読み込み
+      - SUBDOMAINS=tagomori-monitor
+      - TOKEN=${DUCKDNS_TOKEN} # .envから読み込み
       - LOG_FILE=false
     restart: unless-stopped
 
+  # Certbot (SSL証明書管理)
+  certbot:
+    image: certbot/certbot
+    container_name: certbot
+    volumes:
+      # 【重要修正】証明書を絶対パスでマウント
+      - /home/tagomori/server_data/certbot/conf:/etc/letsencrypt
+      - /home/tagomori/server_data/certbot/www:/var/www/certbot
+    # 証明書の自動更新チェック (12時間ごと)
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
 volumes:
-  postgres_data: # Define named volume for PostgreSQL data persistence
+  postgres_data:
   prometheus_data:
   grafana_data:
