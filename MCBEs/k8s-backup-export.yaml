@@ -7,10 +7,11 @@ metadata:
   name: backup-config
   namespace: default
 data:
-  # 環境に合わせてここだけ変えればOK！
-  TARGET_IP: "192.168.0.21"        # VM1 (DevOps) のIP
-  TARGET_USER: "tagomori"          # SSHユーザー
+  TARGET_IP: "192.168.0.21"
+  TARGET_USER: "tagomori"
+  # プロジェクト内のディレクトリへのフルパス
   TARGET_DIR: "/home/tagomori/MinecraftBE_and_Resouce_Monitor/minecraft_backups/"
+
 ---
 # ---------------------------------------------------------
 # 2. スクリプト本体 (ConfigMap)
@@ -26,28 +27,28 @@ data:
     set -e # エラーが出たら即停止
 
     echo "🔧 Installing tools..."
-    # scpコマンドを使うために openssh-client をインストール
-    apk add --no-cache openssh-client tar gzip
+    # 【追加】tzdata (タイムゾーンデータ) をインストール
+    apk add --no-cache openssh-client tar gzip tzdata
+
+    # 【重要】コンテナ内の時間をJSTに設定
+    export TZ=Asia/Tokyo
+    echo "🕒 Current Time (JST): $(date)"
 
     echo "🔧 Setting up SSH..."
     mkdir -p ~/.ssh
-    # Secretからマウントされた鍵をコピー
     cp /etc/secret-volume/id_rsa ~/.ssh/id_rsa
     chmod 600 ~/.ssh/id_rsa
-    # 初回接続時の確認を無視する設定
     echo "StrictHostKeyChecking no" >> ~/.ssh/config
 
     echo "📦 Compressing data..."
-    # 日付入りファイル名生成 (YYYYMMDD-HHMM)
-    FILENAME="world_backup_$(date +%Y%m%d-%H%M).tar.gz"
+    # 【修正】日付のみのファイル名 (YYYYMMDD)
+    FILENAME="world_backup_$(date +%Y%m%d).tar.gz"
     
-    # /data 配下を圧縮 (/tmpにて作業)
-    # ※ mc-monitor 等の不要なファイルを除外しても良いが、一旦丸ごと圧縮
+    # /data 配下を圧縮
     tar -czf /tmp/$FILENAME -C /data .
 
     echo "🚚 Transferring to ${TARGET_USER}@${TARGET_IP}:${TARGET_DIR} ..."
     
-    # 転送実行
     scp -i ~/.ssh/id_rsa /tmp/$FILENAME ${TARGET_USER}@${TARGET_IP}:${TARGET_DIR}/$FILENAME
 
     echo "✅ Backup job finished successfully!"
@@ -62,7 +63,7 @@ metadata:
   name: backup-exporter
   namespace: default
 spec:
-  # 【重要】日本時間で実行
+  # トリガーの時間をJST基準にする
   timeZone: "Asia/Tokyo"
   schedule: "0 5 * * *" # 毎日 朝5:00 (JST)
   
@@ -85,7 +86,7 @@ spec:
               volumeMounts:
                 - name: data-volume
                   mountPath: /data
-                  readOnly: true # バックアップなので読み取り専用で安全に
+                  readOnly: true
                 - name: ssh-key-volume
                   mountPath: /etc/secret-volume
                   readOnly: true
@@ -100,7 +101,6 @@ spec:
                 type: Directory
             - name: ssh-key-volume
               secret:
-                # 【重要】このSecretがK3sに登録されている必要があります！
                 secretName: ssh-key-secret
             - name: script-volume
               configMap:
