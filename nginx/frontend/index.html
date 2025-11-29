@@ -83,13 +83,23 @@
         <div class="card">
             <h2>Server Status</h2>
             <div id="status-text" class="value">Loading...</div>
-            <div><span id="status-icon" class="status-indicator"></span> <span id="uptime">Checking...</span></div>
+            <div class="unit">
+                <span id="status-icon" class="status-indicator"></span> 
+                <span id="uptime">Checking...</span>
+            </div>
+            <div style="margin-top: 10px; font-size: 0.9rem; color: #aaaaaa;">
+                Ping: <span id="ping-value">-</span> ms
+            </div>
         </div>
 
         <div class="card">
             <h2>Players Online</h2>
-            <div class="value"><span id="players-online">-</span> <span class="unit">/ <span id="players-max">-</span></span></div>
-            <div class="unit">Now/Max</div>
+            <div class="value" style="display: flex; align-items: baseline; justify-content: center;">
+                <span id="players-online" style="font-size: 3.5rem; color: #ffffff; text-shadow: 0 0 10px rgba(255,255,255,0.2);">0</span>
+                
+                <span class="unit" style="font-size: 1.5rem; color: #666666; margin-left: 5px;">/ <span id="players-max">25</span></span>
+            </div>
+            <div class="unit" style="margin-top: -5px;">Active Users</div>
         </div>
 
         <div class="card">
@@ -156,6 +166,7 @@
                 document.getElementById('players-online').textContent = data.players.online;
                 document.getElementById('players-max').textContent = data.players.max;
 
+                
                 // 3. メモリ上限表示の更新 (グラフはiframe任せ)
                 const memDetails = document.getElementById('mem-details');
                 if (data.server.memory_limit !== "N/A") {
@@ -165,6 +176,13 @@
                     memDetails.textContent = "Checking Limit...";
                     memDetails.style.color = "#bbbbbb";
                 }
+
+
+                const pingEl = document.getElementById('ping-value');
+                    pingEl.textContent = data.server.latency;
+                    if (data.server.latency < 50) pingEl.style.color = "#00E676"; // 緑 (爆速)
+                        else if (data.server.latency < 100) pingEl.style.color = "#FFEB3B"; // 黄 (普通)
+                else pingEl.style.color = "#F44336";
 
             } catch (error) {
                 console.error("Fetch error:", error);
