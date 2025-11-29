@@ -17,8 +17,8 @@ rules:
     resources: ["deployments"]
     verbs: ["get", "list", "patch"]
   - apiGroups: [""]
-    resources: ["pods", "pods/exec"]
-    verbs: ["get", "list", "create"]
+    resources: ["pods"]
+    verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -58,38 +58,13 @@ data:
     
     echo "⏰ Daily Maintenance Job Started..."
     
-    POD_NAME=$(kubectl get pods -l app=minecraft-bedrock -o jsonpath="{.items[0].metadata.name}")
+    # 以前のハック（メッセージ送信）は不安定なため削除
+    # Bedrock版はRCON非対応のため、無言での計画再起動を行います。
     
-    if [ -z "$POD_NAME" ]; then
-      echo "❌ Minecraft pod not found."
-      exit 1
-    fi
-
-    # ---------------------------------------------------------
-    # 関数: メッセージ送信 (PID特定 -> 標準入力へ書き込み)
-    # ---------------------------------------------------------
-    send_msg() {
-      MSG=$1
-      echo "📢 Sending: $MSG"
-      # プロセスID (PID) を /proc から探して、その標準入力 (fd/0) に echo を流し込む
-      kubectl exec $POD_NAME -c minecraft -- /bin/sh -c "for p in /proc/[0-9]*; do grep 'bedrock_server' \$p/cmdline >/dev/null 2>&1 && echo 'say $MSG' > \$p/fd/0 && break; done"
-    }
-
-    # 1. 予告通知
-    send_msg "§e[System] §bDaily Maintenance starting in 60 seconds."
-    send_msg "§e[System] §fServer will restart to check for updates."
-    
-    # 2. 待機
-    sleep 60
-    
-    # 3. 直前通知
-    send_msg "§e[System] §cRebooting now..."
-    
-    # 4. 再起動 (Rollout Restart)
-    echo "🔄 Triggering rollout restart..."
+    echo "🔄 Triggering rollout restart for $DEPLOYMENT ..."
     kubectl rollout restart deployment/$DEPLOYMENT
     
-    echo "✅ Maintenance restart triggered successfully."
+    echo "✅ Maintenance restart triggered successfully. Server will update on startup."
 
 ---
 # ---------------------------------------------------------
