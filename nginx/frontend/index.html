@@ -88,7 +88,7 @@
                 <span id="uptime">Checking...</span>
             </div>
             <div style="margin-top: 10px; font-size: 0.9rem; color: #aaaaaa;">
-                Ping: <span id="ping-value">-</span> ms
+                Server Response: <span id="ping-value">-</span> ms
             </div>
         </div>
 
@@ -166,7 +166,7 @@
                 document.getElementById('players-online').textContent = data.players.online;
                 document.getElementById('players-max').textContent = data.players.max;
 
-                
+
                 // 3. メモリ上限表示の更新 (グラフはiframe任せ)
                 const memDetails = document.getElementById('mem-details');
                 if (data.server.memory_limit !== "N/A") {
