@@ -10,8 +10,7 @@ data:
   # 環境に合わせてここだけ変えればOK！
   TARGET_IP: "192.168.0.21"        # VM1 (DevOps) のIP
   TARGET_USER: "tagomori"          # SSHユーザー
-  TARGET_DIR: "/minecraft_backups" # 転送先ディレクトリ
-
+  TARGET_DIR: "/home/tagomori/MinecraftBE_and_Resouce_Monitor/minecraft_backups"
 ---
 # ---------------------------------------------------------
 # 2. スクリプト本体 (ConfigMap)
