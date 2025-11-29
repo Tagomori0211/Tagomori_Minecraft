@@ -85,6 +85,10 @@ services:
     container_name: monitoring-grafana
     volumes:
       - grafana_data:/var/lib/grafana
+      # Provisioning設定（読み込み指示書）をマウント
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      # ダッシュボード本体（JSON）をマウント
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=password123
       - GF_SECURITY_ALLOW_EMBEDDING=true
@@ -93,7 +97,7 @@ services:
       - GF_SERVER_DOMAIN=tagomori-monitor.duckdns.org
       - GF_SERVER_ROOT_URL=https://tagomori-monitor.duckdns.org/grafana/
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
-      # 【修正】リスト形式 (-) に統一
+      # JST指定
       - TZ=Asia/Tokyo
     depends_on:
       - prometheus

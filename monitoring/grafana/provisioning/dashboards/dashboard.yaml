@@ -1,0 +1,16 @@
+# monitoring/grafana/provisioning/dashboards/dashboard.yaml
+apiVersion: 1
+
+providers:
+  # ------------------------------------------------------------
+  # プロバイダー定義: ファイルベースでダッシュボードを読み込む設定
+  # ------------------------------------------------------------
+  - name: 'Minecraft Dashboards'
+    orgId: 1
+    folder: ''           # Grafana上のフォルダ名（空ならGeneral）
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10 # ファイルが更新されたら10秒後に反映（開発中に便利）
+    allowUiUpdates: true      # UIでの編集を許可するか（trueだと上書き保存可能だが、再起動でファイルに戻る）
+    options:
+      path: /var/lib/grafana/dashboards # コンテナ内の読み込み先パス（後でマウントします）
