@@ -33,10 +33,12 @@ def get_real_status():
     """
     try:
         server = BedrockServer.lookup(f"{MC_SERVER_IP}:{MC_SERVER_PORT}")
-        # タイムアウトを0.5秒に設定してレスポンス低下を防ぐ
-        status = server.status(timeout=0.5)
+        # 【修正】タイムアウトを 3.0秒 に延長！ (UDPは不安定なため)
+        status = server.status(timeout=3.0)
         return status
     except Exception as e:
+        # 【追加】失敗理由をログに出力 (docker compose logs app で確認可能に)
+        print(f"MCStatus Error: {e}")
         return None
 
 @app.route('/')
@@ -45,13 +47,10 @@ def hello():
 
 @app.route('/api/status')
 def get_status():
-    # -------------------------------------------------
-    # 1. Prometheusからメトリクス収集 (CPU, Mem, Players)
-    # -------------------------------------------------
+    # 1. Prometheusからメトリクス収集
     online_res = query_prometheus('minecraft_status_players_online_count')
     max_res = query_prometheus('minecraft_status_players_max_count')
     
-    # K3s用: ラベル名に注意 (container_label_io_kubernetes_container_name)
     cpu_query = 'sum(rate(container_cpu_usage_seconds_total{container_label_io_kubernetes_container_name="minecraft"}[1m])) * 100'
     cpu_res = query_prometheus(cpu_query)
 
@@ -61,10 +60,7 @@ def get_status():
     limit_query = 'sum(container_spec_memory_limit_bytes{container_label_io_kubernetes_container_name="minecraft"})'
     limit_res = query_prometheus(limit_query)
 
-    # -------------------------------------------------
-    # 2. データの整形 & 直接問い合わせ
-    # -------------------------------------------------
-    # 初期値
+    # 2. データの整形
     players_online = 0
     players_max = 0
     version = "Unknown"
@@ -76,17 +72,15 @@ def get_status():
     mem_limit_str = "N/A"
     mem_percent_str = ""
 
-    # mcstatusで生データを取得 (バージョン & Ping)
+    # mcstatusで生データを取得
     mc_status = get_real_status()
     
     if mc_status:
         status_text = "Online"
-        # 生のバージョン文字列 (例: 1.21.124.01)
         version = mc_status.version.name
-        # レイテンシ (秒 -> ミリ秒変換)
         latency = int(mc_status.latency * 1000) 
         
-        # プレイヤー数はPrometheusの時系列データを優先するが、なければmcstatusを使う
+        # プレイヤー数: Prometheus優先、なければmcstatus
         if online_res:
             players_online = int(online_res['value'][1])
         else:
@@ -98,11 +92,15 @@ def get_status():
             players_max = mc_status.players_max
             
     else:
-        # mcstatusが失敗しても、Prometheusが生きていればOnlineとみなすフォールバック
+        # フォールバック処理 (mcstatus失敗時)
         if online_res:
             status_text = "Online"
             players_online = int(online_res['value'][1])
-            version = "Detecting..." # サーバーは居るがバージョン応答がない場合
+            version = "Detecting..." 
+            
+            # 【バグ修正】ここで最大人数もPrometheusから取る！
+            if max_res:
+                players_max = int(max_res['value'][1])
 
     # CPU整形
     if cpu_res:
@@ -125,9 +123,6 @@ def get_status():
         percent = (mem_val / limit_val) * 100
         mem_percent_str = f"({percent:.1f}%)"
 
-    # -------------------------------------------------
-    # 3. レスポンス生成
-    # -------------------------------------------------
     return jsonify({
         "status": status_text,
         "players": {
@@ -135,8 +130,8 @@ def get_status():
             "max": players_max
         },
         "server": {
-            "version": version,      # 詳細バージョン
-            "latency": latency,      # Ping (ms)
+            "version": version,
+            "latency": latency,
             "cpu_usage": cpu_usage,
             "memory_usage": mem_usage_str,
             "memory_limit": mem_limit_str,
