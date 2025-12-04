@@ -103,10 +103,10 @@ graph TD
 * \[x\] **Phase 1: Infrastructure as Code (Foundation)**  
   * TerraformによるProxmox VMプロビジョニングの実装完了。  
   * 基本的なネットワーク設計とセキュリティグループの定義。  
-* \[ \] **Phase 2: Configuration Management (Automation)**  
+* \[x\] **Phase 2: Configuration Management (Automation)**  
   * Ansible Playbookの作成（Docker, K3sの自動インストール）。  
   * 閉鎖網内でのGitHub Actions Self-hosted Runnerの確立。  
-* \[ \] **Phase 3: Service Deployment (Orchestration)**  
+* \[x\] **Phase 3: Service Deployment (Orchestration)**  
   * Minecraft BEサーバーおよびExporterのK8sデプロイ。  
   * minecraft.yaml に定義されたPV/PVCによるデータ永続化の実証。  
 * \[ \] **Phase 4: Observability & Analytics (Value Creation)**  
