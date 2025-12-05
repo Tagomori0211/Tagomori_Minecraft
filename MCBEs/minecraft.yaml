@@ -55,7 +55,6 @@ spec:
       labels:
         app: minecraft-bedrock
     spec:
-      # --- Init Container: 権限修正 ---
       initContainers:
         - name: fix-permissions
           image: busybox
@@ -70,8 +69,18 @@ spec:
           image: itzg/minecraft-bedrock-server:latest
           tty: true
           stdin: true
+          
+          # 【追加】リソース制限 (ここが重要！)
+          # これを定義することで、PrometheusにLimit値が送られます
+          resources:
+            requests:
+              memory: "2Gi"  # 最低確保量
+              cpu: "500m"
+            limits:
+              memory: "4Gi"  # 上限 (これを表示させたい)
+              cpu: "2"
+
           ports:
-            # 【修正】コンテナポートを 19134 に変更
             - containerPort: 19134
               protocol: UDP
           env:
@@ -85,12 +94,10 @@ spec:
               value: "20"
             - name: SERVER_NAME
               value: "Tagomori-Server"
-            # 【重要】サーバーポートを 19134 に指定
             - name: SERVER_PORT
               value: "19134"
-            # IPv6を無効化しIPv4のみでバインドさせる（監視安定化のため）
             - name: SERVER_PORT_V6
-              value: "19135" 
+              value: "19135"
             - name: TZ
               value: "Asia/Tokyo"
           volumeMounts:
@@ -104,7 +111,6 @@ spec:
             - "/mc-monitor"
             - "export-for-prometheus"
             - "-bedrock-servers"
-            # 【修正】127.0.0.1 かつ ポート 19134 を監視
             - "127.0.0.1:19134"
           ports:
             - containerPort: 8080
@@ -132,10 +138,8 @@ spec:
   type: NodePort
   ports:
     - protocol: UDP
-      # Serviceとしてのポートも 19134 に合わせる
       port: 19134
       targetPort: 19134
-      # 外部公開ポートは 30000 のままでOK（外からは変わらずアクセス可能）
       nodePort: 30000
 
 ---
