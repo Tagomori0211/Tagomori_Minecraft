@@ -1,77 +1,125 @@
-apiVersion: apps/v1
-kind: DaemonSet
+apiVersion: v1
+kind: PersistentVolume
 metadata:
-  name: cadvisor
-  namespace: default
+  name: minecraft-pv
+  labels:
+    type: local
 spec:
-  selector:
-    matchLabels:
-      app: cadvisor
-  template:
-    metadata:
-      labels:
-        app: cadvisor
-    spec:
-      containers:
-      - name: cadvisor
-        image: gcr.io/cadvisor/cadvisor:v0.47.2
-        ports:
-        - containerPort: 8080
-          name: http
-        args:
-          - -housekeeping_interval=10s
-          # 【重要】K3sのcontainerdソケットを指定
-          - -containerd=/run/k3s/containerd/containerd.sock
-          - -docker_only=false
-        volumeMounts:
-        - name: rootfs
-          mountPath: /rootfs
-          readOnly: true
-        - name: var-run
-          mountPath: /var/run
-          readOnly: true
-        - name: sys
-          mountPath: /sys
-          readOnly: true
-        # 【重要】ソケットがあるディレクトリをマウント
-        - name: k3s-containerd
-          mountPath: /run/k3s/containerd
-          readOnly: true
-        - name: disk
-          mountPath: /dev/disk
-          readOnly: true
-      automountServiceAccountToken: false
-      terminationGracePeriodSeconds: 30
-      volumes:
-      - name: rootfs
-        hostPath:
-          path: /
-      - name: var-run
-        hostPath:
-          path: /var/run
-      - name: sys
-        hostPath:
-          path: /sys
-      # 【重要】ホスト側のパス
-      - name: k3s-containerd
-        hostPath:
-          path: /run/k3s/containerd
-      - name: disk
-        hostPath:
-          path: /dev/disk
+  storageClassName: manual
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/home/tagomori/minecraft_data" # ホスト(VM)側の保存先
 
 ---
 apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minecraft-pvc
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mc-bedrock
+  labels:
+    app: minecraft-bedrock
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minecraft-bedrock
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: minecraft-bedrock
+    spec:
+      containers:
+        # ---------------------------------------------------
+        # 1. Main Container: Minecraft Bedrock Server
+        # ---------------------------------------------------
+        - name: minecraft
+          image: itzg/minecraft-bedrock-server:latest
+          tty: true
+          stdin: true
+          ports:
+            - containerPort: 19132
+              protocol: UDP
+          env:
+            - name: EULA
+              value: "TRUE"
+            - name: GAMEMODE
+              value: "survival"
+            - name: DIFFICULTY
+              value: "hard"
+            - name: TZ
+              value: "Asia/Tokyo"
+          volumeMounts:
+            - name: minecraft-data
+              mountPath: /data
+
+        # ---------------------------------------------------
+        # 2. Sidecar Container: Exporter (mc-monitor)
+        #    マイクラのステータスをPrometheus形式で公開する通訳
+        # ---------------------------------------------------
+        - name: exporter
+          image: itzg/mc-monitor:latest
+          command: ["/mc-monitor", "export", "-servers", "localhost:19132"]
+          ports:
+            - containerPort: 8080 # Exporterが公開するポート
+              name: metrics
+          env:
+            - name: TZ
+              value: "Asia/Tokyo"
+
+      volumes:
+        - name: minecraft-data
+          persistentVolumeClaim:
+            claimName: minecraft-pvc
+
+---
+# ---------------------------------------------------
+# Service 1: ゲーム用 (UDP 19132)
+# ---------------------------------------------------
+apiVersion: v1
 kind: Service
 metadata:
-  name: cadvisor-svc
-  namespace: default
+  name: mc-bedrock-svc-game
 spec:
   selector:
-    app: cadvisor
+    app: minecraft-bedrock
+  type: NodePort
+  ports:
+    - protocol: UDP
+      port: 19132
+      targetPort: 19132
+      nodePort: 30000 # ゲーム参加用ポート
+
+---
+# ---------------------------------------------------
+# Service 2: 監視用 (TCP 30001 -> Sidecar 8080)
+# ---------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: mc-bedrock-svc-metrics
+spec:
+  selector:
+    app: minecraft-bedrock
   type: NodePort
   ports:
     - protocol: TCP
       port: 8080
       targetPort: 8080
-      nodePort: 30002
+      nodePort: 30001 # Prometheusがここを見に来ます
