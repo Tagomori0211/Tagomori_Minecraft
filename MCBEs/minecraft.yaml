@@ -1,5 +1,5 @@
 # ---------------------------------------------------------
-# 1. Persistent Volume (PV): 物理的な保存場所の定義
+# 1. Persistent Volume (PV)
 # ---------------------------------------------------------
 apiVersion: v1
 kind: PersistentVolume
@@ -14,13 +14,12 @@ spec:
   accessModes:
     - ReadWriteOnce
   hostPath:
-    # 【重要】過去のバックアップ設定に合わせて /data/minecraft を指定
     path: "/data/minecraft"
-    type: DirectoryOrCreate # ディレクトリがなければ自動作成
+    type: DirectoryOrCreate
 
 ---
 # ---------------------------------------------------------
-# 2. Persistent Volume Claim (PVC): アプリからの利用申請
+# 2. Persistent Volume Claim (PVC)
 # ---------------------------------------------------------
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -36,7 +35,7 @@ spec:
 
 ---
 # ---------------------------------------------------------
-# 3. Deployment: マインクラフト本体と監視サイドカー
+# 3. Deployment (Permissions Fix Added)
 # ---------------------------------------------------------
 apiVersion: apps/v1
 kind: Deployment
@@ -49,7 +48,6 @@ spec:
   selector:
     matchLabels:
       app: minecraft-bedrock
-  # 【重要】デッドロック回避のため Recreate (一度停止してから再作成) を採用
   strategy:
     type: Recreate
   template:
@@ -57,8 +55,18 @@ spec:
       labels:
         app: minecraft-bedrock
     spec:
+      # 【追加】InitContainer: メイン起動前に権限問題を解決する
+      initContainers:
+        - name: fix-permissions
+          image: busybox
+          # /data の所有者を UID:1000 (bedrock user) に変更
+          command: ["sh", "-c", "chown -R 1000:1000 /data"]
+          volumeMounts:
+            - name: minecraft-data
+              mountPath: /data
+
       containers:
-        # --- Main Container: Minecraft Bedrock Server ---
+        # --- Main Container ---
         - name: minecraft
           image: itzg/minecraft-bedrock-server:latest
           tty: true
@@ -73,19 +81,17 @@ spec:
               value: "survival"
             - name: DIFFICULTY
               value: "hard"
-            # 満員エラー対策
             - name: MAX_PLAYERS
               value: "20"
             - name: SERVER_NAME
               value: "Tagomori-Server"
-            # JST設定
             - name: TZ
               value: "Asia/Tokyo"
           volumeMounts:
             - name: minecraft-data
               mountPath: /data
 
-        # --- Sidecar Container: Exporter (mc-monitor) ---
+        # --- Sidecar Container ---
         - name: exporter
           image: itzg/mc-monitor:latest
           command: ["/mc-monitor", "export", "-servers", "localhost:19132"]
@@ -103,7 +109,7 @@ spec:
 
 ---
 # ---------------------------------------------------------
-# 4. Services: 外部公開用ポート定義
+# 4. Services
 # ---------------------------------------------------------
 apiVersion: v1
 kind: Service
@@ -117,7 +123,7 @@ spec:
     - protocol: UDP
       port: 19132
       targetPort: 19132
-      nodePort: 30000 # ゲーム用ポート
+      nodePort: 30000
 
 ---
 apiVersion: v1
@@ -132,4 +138,4 @@ spec:
     - protocol: TCP
       port: 8080
       targetPort: 8080
-      nodePort: 30001 # 監視用ポート
+      nodePort: 30001
