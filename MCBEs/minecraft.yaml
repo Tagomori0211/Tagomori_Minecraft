@@ -55,8 +55,7 @@ spec:
       labels:
         app: minecraft-bedrock
     spec:
-      # --- Init Container: 権限修正 ---
-      # (kubectl get podsには表示されませんが、裏で成功しています)
+      # --- Init Container ---
       initContainers:
         - name: fix-permissions
           image: busybox
@@ -66,7 +65,7 @@ spec:
               mountPath: /data
 
       containers:
-        # --- Main Container: Minecraft Bedrock ---
+        # --- Main Container ---
         - name: minecraft
           image: itzg/minecraft-bedrock-server:latest
           tty: true
@@ -94,12 +93,12 @@ spec:
         # --- Sidecar Container: Exporter (修正箇所) ---
         - name: exporter
           image: itzg/mc-monitor:latest
-          # 【修正】Bedrock専用のコマンドとフラグに変更
           command: 
             - "/mc-monitor"
             - "export-for-prometheus"
             - "-bedrock-servers"
-            - "localhost:19132"
+            # 【修正】localhost -> 127.0.0.1 に変更してIPv4を強制
+            - "127.0.0.1:19132"
           ports:
             - containerPort: 8080
               name: metrics
