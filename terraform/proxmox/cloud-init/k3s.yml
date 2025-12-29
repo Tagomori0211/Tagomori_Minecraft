@@ -1,0 +1,28 @@
+#cloud-config
+
+timezone: Asia/Tokyo
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - git
+
+runcmd:
+  # K3sインストール
+  - curl -sfL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644
+  
+  # kubectlエイリアス設定
+  - echo "alias kubectl='k3s kubectl'" >> /home/tagomori/.bashrc
+  
+  # tagonoriユーザーにkubeconfig権限
+  - mkdir -p /home/tagomori/.kube
+  - cp /etc/rancher/k3s/k3s.yaml /home/tagomori/.kube/config
+  - chown -R tagomori:tagomori /home/tagomori/.kube
+  
+  # GitHub Actions Runner用ディレクトリ
+  - mkdir -p /home/tagomori/actions-runner
+  - chown -R tagomori:tagomori /home/tagomori/actions-runner
+
+final_message: "K3s VM setup complete! K3s installed."

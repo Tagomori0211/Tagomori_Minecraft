@@ -1,0 +1,47 @@
+#cloud-config
+
+# タイムゾーン設定
+timezone: Asia/Tokyo
+
+# パッケージ更新
+package_update: true
+package_upgrade: true
+
+# 必要なパッケージをインストール
+packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+  - git
+
+# Docker公式リポジトリ追加とインストール
+runcmd:
+  # Docker GPGキー追加
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+  
+  # Dockerリポジトリ追加
+  - echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+  
+  # Dockerインストール
+  - apt-get update
+  - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  
+  # tagonoriユーザーをdockerグループに追加
+  - usermod -aG docker tagomori
+  
+  # Dockerサービス有効化
+  - systemctl enable docker
+  - systemctl start docker
+  
+  # 作業ディレクトリ作成
+  - mkdir -p /home/tagomori/actions-runner
+  - chown -R tagomori:tagomori /home/tagomori/actions-runner
+  
+  # システム最適化
+  - sysctl -w vm.max_map_count=262144
+  - echo "vm.max_map_count=262144" >> /etc/sysctl.conf
+
+# 完了メッセージ
+final_message: "Monitoring VM setup complete! Docker installed."
