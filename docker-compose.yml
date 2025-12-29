@@ -16,21 +16,6 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d
 
-  # Python Parser
-  parser:
-    container_name: python-parser
-    build:
-      context: ./parser
-      dockerfile: Dockerfile_parser
-    environment:
-      DATABASE_URL: postgresql://user:password@db:5432/minecraft_resources
-      FLASK_ENV: development
-      TZ: Asia/Tokyo
-    volumes:
-      - ./minecraft_backups:/app/minecraft_backups
-    depends_on:
-      - db
-
   # Flask API Service
   app:
     container_name: app-gunicorn
