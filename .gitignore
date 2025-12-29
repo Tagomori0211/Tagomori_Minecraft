@@ -188,3 +188,10 @@ cython_debug/
 
 # Minecraft Backups
 minecraft_backups/
+
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/terraform.tfvars
+terraform/*.log
