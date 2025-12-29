@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Database Service
   db:
@@ -8,13 +6,18 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_DB: minecraft_resources
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       TZ: Asia/Tokyo
       PGTZ: Asia/Tokyo
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d
+    # PROXMOX環境での性能最適化
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   # Flask API Service
   app:
@@ -25,11 +28,15 @@ services:
     restart: unless-stopped
     command: gunicorn --config gunicorn_config.py app:app
     environment:
-      DATABASE_URL: postgresql://user:password@db:5432/minecraft_resources
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/minecraft_resources
       FLASK_APP_SECRET_KEY: ${FLASK_APP_SECRET_KEY}
       TZ: Asia/Tokyo
     depends_on:
       - db
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   # Nginx Reverse Proxy
   nginx:
@@ -46,10 +53,14 @@ services:
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d
       - ./nginx/frontend:/var/www/html
-      - /home/tagomori/server_data/certbot/conf:/etc/letsencrypt
-      - /home/tagomori/server_data/certbot/www:/var/www/certbot
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
     depends_on:
       - app
+    deploy:
+      resources:
+        limits:
+          memory: 128M
 
   # Prometheus
   prometheus:
@@ -60,9 +71,14 @@ services:
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=15d'  # ストレージ節約
     environment:
       TZ: Asia/Tokyo
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   # Grafana
   grafana:
@@ -70,23 +86,24 @@ services:
     container_name: monitoring-grafana
     volumes:
       - grafana_data:/var/lib/grafana
-      # Provisioning設定（読み込み指示書）をマウント
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
-      # ダッシュボード本体（JSON）をマウント
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=password123
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-password123}
       - GF_SECURITY_ALLOW_EMBEDDING=true
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
       - GF_SERVER_DOMAIN=tagomori-monitor.duckdns.org
       - GF_SERVER_ROOT_URL=https://tagomori-monitor.duckdns.org/grafana/
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
-      # JST指定
       - TZ=Asia/Tokyo
     depends_on:
       - prometheus
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   # DuckDNS Updater
   duckdns:
@@ -101,18 +118,28 @@ services:
       - LOG_FILE=false
     restart: unless-stopped
 
-  # Certbot
+  # Certbot (自動更新)
   certbot:
     image: certbot/certbot
     container_name: certbot
     environment:
       TZ: Asia/Tokyo
     volumes:
-      - /home/tagomori/server_data/certbot/conf:/etc/letsencrypt
-      - /home/tagomori/server_data/certbot/www:/var/www/certbot
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done;'"
 
 volumes:
   postgres_data:
   prometheus_data:
   grafana_data:
+  certbot_conf:    # ホストパス依存を排除
+  certbot_www:
+
+# PROXMOX環境用ネットワーク最適化
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
