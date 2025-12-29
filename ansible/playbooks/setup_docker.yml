@@ -1,6 +1,6 @@
 ---
-- name: Setup Docker on DevOps VM
-  hosts: devops_vm
+- name: Setup Docker on Monitor VM
+  hosts: Monitor_vm
   become: true # root権限で実行
   tasks:
     - name: Install required packages

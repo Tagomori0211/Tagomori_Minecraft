@@ -1,6 +1,6 @@
 ---
 - name: Setup K3s on Minecraft Server VM
-  hosts: mcbe_server_vm
+  hosts: App_vm
   become: true
   tasks:
     - name: Install K3s (Master Node)
