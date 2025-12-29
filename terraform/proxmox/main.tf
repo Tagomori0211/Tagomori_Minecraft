@@ -1,67 +1,103 @@
-resource "proxmox_vm_qemu" "monitoring" {
-  name        = "minecraft-monitoring"
-  target_node = "pve"
-  clone       = "ubuntu-2404-cloud-init"
-  vmid        = 100
+# 監視スタックVM (192.168.0.100)
+resource "proxmox_virtual_environment_vm" "monitoring" {
+  name      = "minecraft-monitoring"
+  node_name = "mc-server"  # ← 変更
+  vm_id     = 100
   
-  cores   = 4
-  sockets = 1
-  memory  = 4096
+  clone {
+    vm_id = 9000
+  }
   
-  disks {
-    scsi {
-      scsi0 {
-        disk {
-          size    = 32
-          storage = "local"
-          format  = "raw"
-        }
+  cpu {
+    cores = 4
+    type  = "host"
+  }
+  
+  memory {
+    dedicated = 4096
+  }
+  
+  disk {
+    datastore_id = "local-lvm"
+    interface    = "scsi0"
+    size         = 32
+  }
+  
+  network_device {
+    bridge = "vmbr0"
+    model  = "virtio"
+  }
+  
+  initialization {
+    ip_config {
+      ipv4 {
+        address = "192.168.0.100/24"
+        gateway = "192.168.0.1"
       }
+    }
+    
+    dns {
+      servers = ["192.168.0.1"]
+    }
+    
+    user_account {
+      username = "tagomori"
+      keys     = [var.ssh_public_key]
     }
   }
   
-  network {
-    model  = "virtio"
-    bridge = "vmbr0"
-  }
-  
-  ipconfig0  = "ip=192.168.0.100/24,gw=192.168.0.1"
-  nameserver = "192.168.0.1"
-  ciuser     = "tagomori"
-  sshkeys    = var.ssh_public_key
-  onboot     = true
+  on_boot = true
+  started = true
 }
 
-resource "proxmox_vm_qemu" "minecraft_k3s" {
-  name        = "minecraft-k3s"
-  target_node = "pve"
-  clone       = "ubuntu-2404-cloud-init"
-  vmid        = 101
+# マイクラK3s VM (192.168.0.101)
+resource "proxmox_virtual_environment_vm" "minecraft_k3s" {
+  name      = "minecraft-k3s"
+  node_name = "mc-server"  # ← 変更
+  vm_id     = 101
   
-  cores   = 6
-  sockets = 1
-  memory  = 8192
+  clone {
+    vm_id = 9000
+  }
   
-  disks {
-    scsi {
-      scsi0 {
-        disk {
-          size    = 200
-          storage = "local"
-          format  = "raw"
-        }
+  cpu {
+    cores = 6
+    type  = "host"
+  }
+  
+  memory {
+    dedicated = 8192
+  }
+  
+  disk {
+    datastore_id = "local-lvm"
+    interface    = "scsi0"
+    size         = 200
+  }
+  
+  network_device {
+    bridge = "vmbr0"
+    model  = "virtio"
+  }
+  
+  initialization {
+    ip_config {
+      ipv4 {
+        address = "192.168.0.101/24"
+        gateway = "192.168.0.1"
       }
+    }
+    
+    dns {
+      servers = ["192.168.0.1"]
+    }
+    
+    user_account {
+      username = "tagomori"
+      keys     = [var.ssh_public_key]
     }
   }
   
-  network {
-    model  = "virtio"
-    bridge = "vmbr0"
-  }
-  
-  ipconfig0  = "ip=192.168.0.101/24,gw=192.168.0.1"
-  nameserver = "192.168.0.1"
-  ciuser     = "tagomori"
-  sshkeys    = var.ssh_public_key
-  onboot     = true
+  on_boot = true
+  started = true
 }
