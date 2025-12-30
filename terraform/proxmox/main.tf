@@ -30,6 +30,7 @@ resource "proxmox_virtual_environment_vm" "monitoring" {
   
   initialization {
     datastore_id      = "local-lvm"
+    # Base設定 (cloud-init-base.yml) を使用
     user_data_file_id = proxmox_virtual_environment_file.cloud_init_base.id
     
     ip_config {
@@ -42,12 +43,8 @@ resource "proxmox_virtual_environment_vm" "monitoring" {
     dns {
       servers = ["192.168.0.1"]
     }
-    
-    user_account {
-      username = "tagomori"
-      password = "tagomori123"
-      keys     = [var.ssh_public_key]
-    }
+
+    # Cloud-init側でユーザーを作成するため、Terraform側のuser_accountブロックは削除
   }
   
   on_boot = true
@@ -86,7 +83,8 @@ resource "proxmox_virtual_environment_vm" "minecraft_k3s" {
   
   initialization {
     datastore_id      = "local-lvm"
-    user_data_file_id = proxmox_virtual_environment_file.cloud_init_base.id
+    # 【重要】K3s用設定 (cloud-init-k3s.yml) を使用するように変更
+    user_data_file_id = proxmox_virtual_environment_file.cloud_init_k3s.id
     
     ip_config {
       ipv4 {
@@ -99,53 +97,39 @@ resource "proxmox_virtual_environment_vm" "minecraft_k3s" {
       servers = ["192.168.0.1"]
     }
     
-    user_account {
-      username = "tagomori"
-      password = "tagomori123"
-      keys     = [var.ssh_public_key]
-    }
+    # Cloud-init側でユーザーを作成するため、Terraform側のuser_accountブロックは削除
   }
   
   on_boot = true
   started = true
 }
 
-# Cloud-init基本設定
+# Cloud-init基本設定 (Base)
 resource "proxmox_virtual_environment_file" "cloud_init_base" {
   content_type = "snippets"
   datastore_id = "local"
   node_name    = "mc-server"
 
   source_raw {
-    data = <<-EOF
-    #cloud-config
-    timezone: Asia/Tokyo
-    
-    # SSH設定
-    ssh_pwauth: true
-    disable_root: false
-    
-    # パッケージ更新のみ
-    package_update: true
-    package_upgrade: true
-    
-    # 基本パッケージ
-    packages:
-      - python3
-      - python3-pip
-      - curl
-      - git
-    
-    # SSH設定を有効化
-    runcmd:
-      - sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
-      - sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
-      - systemctl restart sshd
-      - echo 'Base setup complete - ready for Ansible'
-    
-    final_message: "VM ready for Ansible provisioning"
-    EOF
-
+    # templatefile関数で外部YAMLを読み込み、変数を埋め込む
+    data = templatefile("${path.module}/cloud-init/base.yml", {
+      ssh_public_key = var.ssh_public_key
+    })
     file_name = "cloud-init-base.yml"
+  }
+}
+
+# Cloud-init K3s設定 (New)
+resource "proxmox_virtual_environment_file" "cloud_init_k3s" {
+  content_type = "snippets"
+  datastore_id = "local"
+  node_name    = "mc-server"
+
+  source_raw {
+    # templatefile関数で外部YAMLを読み込み、変数を埋め込む
+    data = templatefile("${path.module}/cloud-init/k3s.yml", {
+      ssh_public_key = var.ssh_public_key
+    })
+    file_name = "cloud-init-k3s.yml"
   }
 }

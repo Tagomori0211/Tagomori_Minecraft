@@ -1,6 +1,14 @@
 #cloud-config
-
 timezone: Asia/Tokyo
+
+# ユーザー設定は各ファイルに必要
+users:
+  - name: tagomori
+    groups: sudo
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    ssh_authorized_keys:
+      - ${ssh_public_key}
 
 package_update: true
 package_upgrade: true
@@ -13,15 +21,15 @@ runcmd:
   # K3sインストール
   - curl -sfL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644
   
-  # kubectlエイリアス設定
+  # kubectlエイリアス
   - echo "alias kubectl='k3s kubectl'" >> /home/tagomori/.bashrc
   
-  # tagonoriユーザーにkubeconfig権限
+  # kubeconfig権限設定
   - mkdir -p /home/tagomori/.kube
   - cp /etc/rancher/k3s/k3s.yaml /home/tagomori/.kube/config
   - chown -R tagomori:tagomori /home/tagomori/.kube
   
-  # GitHub Actions Runner用ディレクトリ
+  # GitHub Actions用
   - mkdir -p /home/tagomori/actions-runner
   - chown -R tagomori:tagomori /home/tagomori/actions-runner
 
