@@ -1,0 +1,14 @@
+---
+- name: Setup Monitoring VM
+  hosts: monitoring
+  become: yes
+  tasks:
+    - name: Install Docker
+      include_tasks: setup_monitoring.yml
+
+- name: Setup K3s VM
+  hosts: k3s
+  become: yes
+  tasks:
+    - name: Install K3s
+      include_tasks: setup_k3s.yml

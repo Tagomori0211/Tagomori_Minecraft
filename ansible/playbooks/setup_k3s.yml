@@ -1,14 +1,67 @@
 ---
-- name: Setup K3s on Minecraft Server VM
-  hosts: App_vm
-  become: true
-  tasks:
-    - name: Install K3s (Master Node)
-      shell: curl -sfL https://get.k3s.io | sh -
-      args:
-        creates: /usr/local/bin/k3s
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
 
-    - name: Change k3s.yaml permission
-      file:
-        path: /etc/rancher/k3s/k3s.yaml
-        mode: '0644' # 一般ユーザーでもkubectlを見れるようにする
+- name: Install prerequisites
+  apt:
+    name:
+      - curl
+      - git
+    state: present
+
+- name: Download K3s installation script
+  get_url:
+    url: https://get.k3s.io
+    dest: /tmp/k3s-install.sh
+    mode: '0755'
+
+- name: Install K3s
+  shell: |
+    INSTALL_K3S_EXEC='--write-kubeconfig-mode 644' /tmp/k3s-install.sh
+  args:
+    creates: /usr/local/bin/k3s
+
+- name: Wait for K3s to be ready
+  wait_for:
+    port: 6443
+    delay: 10
+    timeout: 300
+
+- name: Create .kube directory for tagomori
+  file:
+    path: /home/tagomori/.kube
+    state: directory
+    owner: tagomori
+    group: tagomori
+    mode: '0700'
+
+- name: Copy kubeconfig for tagomori
+  copy:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: /home/tagomori/.kube/config
+    remote_src: yes
+    owner: tagomori
+    group: tagomori
+    mode: '0600'
+
+- name: Add kubectl alias to bashrc
+  lineinfile:
+    path: /home/tagomori/.bashrc
+    line: "{{ item }}"
+    create: yes
+  loop:
+    - "alias kubectl='k3s kubectl'"
+    - "export KUBECONFIG=/home/tagomori/.kube/config"
+
+- name: Create working directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: tagomori
+    group: tagomori
+    mode: '0755'
+  loop:
+    - /home/tagomori/actions-runner
+    - /home/tagomori/Tagomori_Minecraft
