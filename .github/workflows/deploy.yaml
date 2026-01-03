@@ -47,6 +47,8 @@ jobs:
         # 3. cAdvisorのマニフェストを適用！ (./kubectl で実行)
         echo "🚀 Applying cAdvisor manifest to K3s..."
         ./kubectl apply -f MCBEs/cadvisor.yaml
+        ./kubectl apply -f MCBEs/minecraft.yaml
         
         # 4. 設定変更を確実にするためPodを再作成
         ./kubectl delete pods -l app=cadvisor --ignore-not-found=true
+        ./kubectl delete pods -l app=minecraft-bedrock --ignore-not-found=true
