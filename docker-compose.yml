@@ -105,29 +105,7 @@ services:
         limits:
           memory: 256M
 
-  # DuckDNS Updater
-  duckdns:
-    image: lscr.io/linuxserver/duckdns:latest
-    container_name: duckdns
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Asia/Tokyo
-      - SUBDOMAINS=tagomori-monitor
-      - TOKEN=${DUCKDNS_TOKEN}
-      - LOG_FILE=false
-    restart: unless-stopped
-
-  # Certbot (自動更新)
-  certbot:
-    image: certbot/certbot
-    container_name: certbot
-    environment:
-      TZ: Asia/Tokyo
-    volumes:
-      - certbot_conf:/etc/letsencrypt
-      - certbot_www:/var/www/certbot
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done;'"
+  
 
 volumes:
   postgres_data:
